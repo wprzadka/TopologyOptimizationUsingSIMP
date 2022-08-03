@@ -1,3 +1,4 @@
 [submodule "SimpleFEM"]
 	path = SimpleFEM
 	url = git@github.com:wprzadka/SimpleFEM.git
+	branch = main
