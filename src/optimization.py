@@ -1,9 +1,13 @@
 from enum import Enum
+from typing import Callable
 
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import tri
 
 from SimpleFEM.source.mesh import Mesh
 from SimpleFEM.source.fem.elasticity_setup import ElasticitySetup as FEM
+from SimpleFEM.source.fem.utils import center_of_mass, area_of_triangle
 
 
 class MaterialProperty(Enum):
@@ -13,6 +17,24 @@ class MaterialProperty(Enum):
     CastIron = (14.5, 0.21)
 
 
+def plot_dispalcements(mesh: Mesh, displacements: np.ndarray, filename: str = 'displacements.png'):
+    before = tri.Triangulation(
+        x=mesh.coordinates2D[:, 0],
+        y=mesh.coordinates2D[:, 1],
+        triangles=mesh.nodes_of_elem
+    )
+    plt.triplot(before, color='#1f77b4')
+    after = tri.Triangulation(
+        x=mesh.coordinates2D[:, 0] + displacements[:, 0],
+        y=mesh.coordinates2D[:, 1] + displacements[:, 1],
+        triangles=mesh.nodes_of_elem
+    )
+    plt.triplot(after, color='#ff7f0e')
+    plt.grid()
+    plt.savefig(filename)
+    plt.close()
+
+
 class Optimization:
 
     def __init__(
@@ -20,60 +42,144 @@ class Optimization:
             mesh: Mesh,
             penalty: float,
             volume_fraction: float,
+            material: MaterialProperty,
+            rhs_func: Callable,
+            dirichlet_func: Callable = None,
+            neumann_func: Callable = None
     ):
         self.mesh = mesh
+
+        self.elem_volumes = self.get_elems_volumes()
+        self.volume = np.sum(self.elem_volumes)
+
         self.penalty = penalty
         self.volume_fraction = volume_fraction
 
-    def bisection(self, x: np.ndarray, comp_deriv: np.ndarray):
-        step = 0.1
-        lower = 0
-        upper = 100
+        self.material = material
 
-        while lower < upper:
+        self.rhs_func = rhs_func
+        self.dirichlet_func = dirichlet_func
+        self.neumann_func = neumann_func
+
+    def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
+        step = 0.2
+        lower = 0
+        upper = 1e5
+
+        lower_limit = np.maximum(0.001, x - step)
+        upper_limit = np.minimum(1., x + step)
+
+        x_new = None
+
+        while upper - lower > 1e-4:
             mid = lower + (upper - lower) / 2
 
-            lower_limit = np.maximum(0, x - step)
-            upper_limit = np.minimum(1, x + step)
-
-            beta = (comp_deriv / mid) ** self.penalty
+            beta = (-comp_deriv / mid) ** numerical_dumping
             x_new = np.clip(beta * x, lower_limit, upper_limit)
-            if np.sum(x_new) < self.volume_fraction * self.mesh.nodes_num:
+
+            # volume [np.sum(self.elem_volumes * x_new)] is monotonously decreasing function of lagrange multiplayer [mid]
+            if np.sum(self.elem_volumes * x_new) < self.volume_fraction * self.volume:
                 upper = mid
             else:
                 lower = mid
+        return x_new
 
-    # def clamp(self, x, lower, upper):
-    #     return max(min(x, upper), lower)
+    def mesh_independency_filter(self, comp_deriv: np.ndarray, density: np.ndarray, radius: float):
+        new_comp_deriv = np.zeros_like(comp_deriv)
+        for el_idx, el_nodes in enumerate(self.mesh.nodes_of_elem):
+            el_center = center_of_mass(self.mesh.coordinates2D[el_nodes])
 
-    def optimize(self):
+            weights_sum = 0
+            combined_sum = 0
 
-        iteration_limit = 1
-        # TODO density per element (not per node)
-        density = np.full(self.mesh.nodes_num, fill_value=self.volume_fraction)
+            for oth_idx, oth_nodes in enumerate(self.mesh.nodes_of_elem):
+                oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
+                dist = np.linalg.norm(el_center - oth_center)
+                if dist > radius:
+                    continue
+                weight = radius - dist
+                weights_sum += weight
+                combined_sum += weight * density[oth_idx] * comp_deriv[oth_idx]
+
+            new_comp_deriv[el_idx] = combined_sum / (density[el_idx] * weights_sum)
+        return new_comp_deriv
+
+    def get_elems_volumes(self):
+        volumes = np.array([
+            area_of_triangle(self.mesh.coordinates2D[nodes_ids])
+            for nodes_ids in self.mesh.nodes_of_elem
+        ])
+        return volumes
+
+    def draw(self, density: np.ndarray, file_name: str):
+        triangulation = tri.Triangulation(
+            x=self.mesh.coordinates2D[:, 0],
+            y=self.mesh.coordinates2D[:, 1],
+            triangles=self.mesh.nodes_of_elem
+        )
+        plt.tripcolor(triangulation, density)
+        plt.colorbar()
+        plt.savefig(file_name)
+        plt.close()
+
+    def optimize(self, iteration_limit: int = 100):
+
+        density = np.full(self.mesh.elems_num, fill_value=self.volume_fraction)
 
         iteration = 0
         change = 1.
-        while change > 0.01 and iteration < iteration_limit:
+        comp_derivative = np.ones_like(density)
+
+        fem = FEM(
+            mesh=self.mesh,
+            rhs_func=self.rhs_func,
+            dirichlet_func=self.dirichlet_func,
+            neumann_func=self.neumann_func,
+            young_modulus=self.material.value[0],
+            poisson_ratio=self.material.value[1]
+        )
+
+        displacement = fem.solve(modifier=density ** self.penalty)
+        plot_dispalcements(
+            displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
+            mesh=self.mesh,
+            filename='initial_displacements'
+        )
+
+        while change > 1e-4 and iteration < iteration_limit:
             iteration += 1
 
-            rhs_func = lambda x: np.array([0, 0])
-            dirichlet_func = lambda x: np.array([0, 0])
-            neumann_func = lambda x: np.array([-0, -1])
+            displacement, stiff_mat = fem.solve(modifier=density ** self.penalty, return_stiffness_matrix=True)
 
-            fem = FEM(
-                mesh=self.mesh,
-                rhs_func=rhs_func,
-                dirichlet_func=dirichlet_func,
-                neumann_func=neumann_func,
-                young_modulus=MaterialProperty.CarbonSteel.value[0],
-                poisson_ratio=MaterialProperty.CarbonSteel.value[1]
-            )
-            # TODO density has to be added to stiffness matrix
-            displacement = fem.solve(density=density)
+            compliance = 0
+            for elem_idx, nodes_ids in enumerate(self.mesh.nodes_of_elem):
+                base_func_ids = np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
 
-            compliance = displacement.T @ fem.stiffness_matrix @ displacement
-            comp_derivative = -self.penalty * (compliance ** (self.penalty - 1))
-            self.bisection(x=displacement, comp_deriv=comp_derivative)
+                elem_displacement = np.expand_dims(displacement[base_func_ids], 1)
+                elem_stiff = stiff_mat[base_func_ids][:, base_func_ids]
 
-            print(displacement)
+                elem_compliance = elem_displacement.T @ elem_stiff @ elem_displacement
+                compliance += (density[elem_idx] ** self.penalty) * elem_compliance
+                comp_derivative[elem_idx] = -self.penalty * (density[elem_idx] ** (self.penalty - 1)) * elem_compliance
+            print(f'compliance = {compliance}')
+
+            # comp_derivative = self.mesh_independency_filter(
+            #     comp_deriv=comp_derivative,
+            #     density=density,
+            #     radius=4.
+            # )
+
+            old_density = density.copy()
+            density = self.bisection(x=density, comp_deriv=comp_derivative)
+            print(f'volume = {np.sum(density * self.elem_volumes)}')
+            change = max(abs(density - old_density))
+            print(f'change = {change}')
+
+            if iteration % 1 == 0:
+                self.draw(density, f'density_{iteration}')
+                self.draw(comp_derivative, f'dc_{iteration}')
+                plot_dispalcements(
+                    displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
+                    mesh=self.mesh,
+                    filename=f'displacements_{iteration}'
+                )
