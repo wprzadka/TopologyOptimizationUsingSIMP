@@ -55,6 +55,7 @@ class Optimization:
         self.elem_volumes = self.get_elems_volumes()
         self.volume = np.sum(self.elem_volumes)
 
+        self.elem_surrounding = self.get_elements_surrounding()
 
     def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
         step = 0.2
@@ -87,17 +88,31 @@ class Optimization:
             weights_sum = 0
             combined_sum = 0
 
-            for oth_idx, oth_nodes in enumerate(self.mesh.nodes_of_elem):
+            for oth_idx in self.elem_surrounding[el_idx]:
+                oth_nodes = self.mesh.nodes_of_elem[oth_idx]
                 oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
                 dist = np.linalg.norm(el_center - oth_center)
-                if dist > self.filter_radius:
-                    continue
+
                 weight = self.filter_radius - dist
                 weights_sum += weight
                 combined_sum += weight * density[oth_idx] * comp_deriv[oth_idx]
 
             new_comp_deriv[el_idx] = combined_sum / (density[el_idx] * weights_sum)
         return new_comp_deriv
+
+    def get_elements_surrounding(self):
+        surroundings = [[] for _ in range(self.mesh.elems_num)]
+        for el_idx, el_nodes in enumerate(self.mesh.nodes_of_elem):
+            el_center = center_of_mass(self.mesh.coordinates2D[el_nodes])
+
+            for oth_idx, oth_nodes in enumerate(self.mesh.nodes_of_elem):
+                oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
+
+                dist = np.linalg.norm(el_center - oth_center)
+                if dist > self.filter_radius:
+                    continue
+                surroundings[el_idx].append(oth_idx)
+        return surroundings
 
     def get_elems_volumes(self):
         volumes = np.array([
