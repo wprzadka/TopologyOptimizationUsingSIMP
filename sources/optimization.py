@@ -33,26 +33,28 @@ class Optimization:
     def __init__(
             self,
             mesh: Mesh,
-            penalty: float,
-            volume_fraction: float,
             material: MaterialProperty,
             rhs_func: Callable,
             dirichlet_func: Callable = None,
-            neumann_func: Callable = None
+            neumann_func: Callable = None,
+            penalty: float = 3,
+            volume_fraction: float = 0.6,
+            filter_radius: float = 1.
     ):
         self.mesh = mesh
-
-        self.elem_volumes = self.get_elems_volumes()
-        self.volume = np.sum(self.elem_volumes)
-
-        self.penalty = penalty
-        self.volume_fraction = volume_fraction
-
         self.material = material
 
         self.rhs_func = rhs_func
         self.dirichlet_func = dirichlet_func
         self.neumann_func = neumann_func
+
+        self.penalty = penalty
+        self.volume_fraction = volume_fraction
+        self.filter_radius = filter_radius
+
+        self.elem_volumes = self.get_elems_volumes()
+        self.volume = np.sum(self.elem_volumes)
+
 
     def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
         step = 0.2
@@ -77,7 +79,7 @@ class Optimization:
                 lower = mid
         return x_new
 
-    def mesh_independency_filter(self, comp_deriv: np.ndarray, density: np.ndarray, radius: float):
+    def mesh_independency_filter(self, comp_deriv: np.ndarray, density: np.ndarray):
         new_comp_deriv = np.zeros_like(comp_deriv)
         for el_idx, el_nodes in enumerate(self.mesh.nodes_of_elem):
             el_center = center_of_mass(self.mesh.coordinates2D[el_nodes])
@@ -88,9 +90,9 @@ class Optimization:
             for oth_idx, oth_nodes in enumerate(self.mesh.nodes_of_elem):
                 oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
                 dist = np.linalg.norm(el_center - oth_center)
-                if dist > radius:
+                if dist > self.filter_radius:
                     continue
-                weight = radius - dist
+                weight = self.filter_radius - dist
                 weights_sum += weight
                 combined_sum += weight * density[oth_idx] * comp_deriv[oth_idx]
 
@@ -150,8 +152,7 @@ class Optimization:
 
             comp_derivative = self.mesh_independency_filter(
                 comp_deriv=comp_derivative,
-                density=density,
-                radius=10.
+                density=density
             )
 
             old_density = density.copy()

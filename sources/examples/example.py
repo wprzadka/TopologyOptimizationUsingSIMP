@@ -25,11 +25,12 @@ if __name__ == '__main__':
 
     optim = Optimization(
         mesh=mesh,
-        penalty=3,
-        volume_fraction=0.5,
         material=MaterialProperty.Polystyrene,
         rhs_func=rhs_func,
         dirichlet_func=dirichlet_func,
-        neumann_func=neumann_func
+        neumann_func=neumann_func,
+        penalty=3,
+        volume_fraction=0.5,
+        filter_radius=10.
     )
     optim.optimize(iteration_limit=30)
