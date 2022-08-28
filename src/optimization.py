@@ -122,7 +122,6 @@ class Optimization:
 
         iteration = 0
         change = 1.
-        comp_derivative = np.ones_like(density)
 
         fem = FEM(
             mesh=self.mesh,
@@ -138,15 +137,16 @@ class Optimization:
 
             displacement = fem.solve(modifier=density ** self.penalty)
 
-            compliance = 0
+            elements_compliance = np.zeros_like(density)
             for elem_idx, nodes_ids in enumerate(self.mesh.nodes_of_elem):
                 base_func_ids = np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
                 elem_displacement = np.expand_dims(displacement[base_func_ids], 1)
                 elem_stiff = fem.construct_local_stiffness_matrix(elem_idx)
 
-                elem_compliance = elem_displacement.T @ elem_stiff @ elem_displacement
-                compliance += (density[elem_idx] ** self.penalty) * elem_compliance
-                comp_derivative[elem_idx] = -self.penalty * (density[elem_idx] ** (self.penalty - 1)) * elem_compliance
+                elements_compliance[elem_idx] = elem_displacement.T @ elem_stiff @ elem_displacement
+
+            compliance = np.sum((density ** self.penalty) * elements_compliance)
+            comp_derivative = -self.penalty * (density ** (self.penalty - 1)) * elements_compliance
             print(f'compliance = {compliance}')
 
             comp_derivative = self.mesh_independency_filter(
@@ -164,6 +164,7 @@ class Optimization:
             if iteration % 1 == 0:
                 self.draw(density, f'density_{iteration}')
                 self.draw(comp_derivative, f'dc_{iteration}')
+                self.draw(elements_compliance, f'comp_{iteration}')
                 plot_dispalcements(
                     displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
                     mesh=self.mesh,
