@@ -7,14 +7,8 @@ from matplotlib import tri
 
 from SimpleFEM.source.mesh import Mesh
 from SimpleFEM.source.fem.elasticity_setup import ElasticitySetup as FEM
-from SimpleFEM.source.fem.utils import center_of_mass, area_of_triangle
-
-
-class MaterialProperty(Enum):
-    AluminumAlloys = (10.2, 0.33)
-    BerylliumCopper = (18.0, 0.29)
-    CarbonSteel = (29.0, 0.29)
-    CastIron = (14.5, 0.21)
+from SimpleFEM.source.utilities.computation_utils import center_of_mass, area_of_triangle
+from SimpleFEM.source.examples.materials import MaterialProperty
 
 
 def plot_dispalcements(mesh: Mesh, displacements: np.ndarray, filename: str = 'displacements.png'):
@@ -139,40 +133,32 @@ class Optimization:
             poisson_ratio=self.material.value[1]
         )
 
-        displacement = fem.solve(modifier=density ** self.penalty)
-        plot_dispalcements(
-            displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
-            mesh=self.mesh,
-            filename='initial_displacements'
-        )
-
         while change > 1e-4 and iteration < iteration_limit:
             iteration += 1
 
-            displacement, stiff_mat = fem.solve(modifier=density ** self.penalty, return_stiffness_matrix=True)
+            displacement = fem.solve(modifier=density ** self.penalty)
 
             compliance = 0
             for elem_idx, nodes_ids in enumerate(self.mesh.nodes_of_elem):
                 base_func_ids = np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
-
                 elem_displacement = np.expand_dims(displacement[base_func_ids], 1)
-                elem_stiff = stiff_mat[base_func_ids][:, base_func_ids]
+                elem_stiff = fem.construct_local_stiffness_matrix(elem_idx)
 
                 elem_compliance = elem_displacement.T @ elem_stiff @ elem_displacement
                 compliance += (density[elem_idx] ** self.penalty) * elem_compliance
                 comp_derivative[elem_idx] = -self.penalty * (density[elem_idx] ** (self.penalty - 1)) * elem_compliance
             print(f'compliance = {compliance}')
 
-            # comp_derivative = self.mesh_independency_filter(
-            #     comp_deriv=comp_derivative,
-            #     density=density,
-            #     radius=4.
-            # )
+            comp_derivative = self.mesh_independency_filter(
+                comp_deriv=comp_derivative,
+                density=density,
+                radius=10.
+            )
 
             old_density = density.copy()
             density = self.bisection(x=density, comp_deriv=comp_derivative)
             print(f'volume = {np.sum(density * self.elem_volumes)}')
-            change = max(abs(density - old_density))
+            change = np.max(np.abs(density - old_density))
             print(f'change = {change}')
 
             if iteration % 1 == 0:
