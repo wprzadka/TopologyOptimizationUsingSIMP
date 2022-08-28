@@ -128,16 +128,22 @@ class Optimization:
         ])
         return volumes
 
-    def draw(self, density: np.ndarray, file_name: str, norm=None):
+    def draw(self, density: np.ndarray, file_name: str, ratio: float = None, norm=None):
         triangulation = tri.Triangulation(
             x=self.mesh.coordinates2D[:, 0],
             y=self.mesh.coordinates2D[:, 1],
             triangles=self.mesh.nodes_of_elem
         )
-        plt.tripcolor(triangulation, density, cmap='gray', norm=norm)
-        # plt.colorbar()
+
+        fig, ax = plt.subplots()
+        ax.tripcolor(triangulation, density, cmap='gray', norm=norm)
+        if ratio is not None:
+            x_left, x_right = ax.get_xlim()
+            y_low, y_high = ax.get_ylim()
+            ax.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * ratio)
+        # ax.colorbar()
         plt.savefig(file_name, bbox_inches='tight')
-        plt.close()
+        plt.close(fig)
 
     def optimize(self, iteration_limit: int = 100):
 
@@ -187,20 +193,19 @@ class Optimization:
             if iteration == 1 or iteration % 5 == 0:
                 self.draw(
                     -density,
-                    os.path.join(Config.IMAGES_PATH.value, f'density/density_{iteration}'),
+                    os.path.join(Config.IMAGES_PATH.value, f'density/density{iteration}'),
                     norm=colors.Normalize(vmin=-1, vmax=0)
                 )
                 self.draw(
                     comp_derivative,
-                    os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative_log/dc_{iteration}'),
-                    # norm=colors.LogNorm()
+                    os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative/dc{iteration}'),
                 )
                 self.draw(
                     elements_compliance,
-                    os.path.join(Config.IMAGES_PATH.value, f'compliance/comp_{iteration}')
+                    os.path.join(Config.IMAGES_PATH.value, f'compliance/comp{iteration}')
                 )
                 plot_dispalcements(
                     displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
                     mesh=self.mesh,
-                    filename=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ_{iteration}')
+                    filename=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ{iteration}')
                 )
