@@ -1,13 +1,20 @@
+import os
+from enum import Enum
 from typing import Callable
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colors
 from matplotlib import tri
 
 from SimpleFEM.source.mesh import Mesh
 from SimpleFEM.source.fem.elasticity_setup import ElasticitySetup as FEM
 from SimpleFEM.source.utilities.computation_utils import center_of_mass, area_of_triangle
 from SimpleFEM.source.examples.materials import MaterialProperty
+
+
+class Config(Enum):
+    IMAGES_PATH = 'images'
 
 
 def plot_dispalcements(mesh: Mesh, displacements: np.ndarray, filename: str = 'displacements.png'):
@@ -121,15 +128,15 @@ class Optimization:
         ])
         return volumes
 
-    def draw(self, density: np.ndarray, file_name: str):
+    def draw(self, density: np.ndarray, file_name: str, norm=None):
         triangulation = tri.Triangulation(
             x=self.mesh.coordinates2D[:, 0],
             y=self.mesh.coordinates2D[:, 1],
             triangles=self.mesh.nodes_of_elem
         )
-        plt.tripcolor(triangulation, density)
-        plt.colorbar()
-        plt.savefig(file_name)
+        plt.tripcolor(triangulation, density, cmap='gray', norm=norm)
+        # plt.colorbar()
+        plt.savefig(file_name, bbox_inches='tight')
         plt.close()
 
     def optimize(self, iteration_limit: int = 100):
@@ -163,6 +170,7 @@ class Optimization:
 
             compliance = np.sum((density ** self.penalty) * elements_compliance)
             comp_derivative = -self.penalty * (density ** (self.penalty - 1)) * elements_compliance
+            print(f'iteration: {iteration}')
             print(f'compliance = {compliance}')
 
             comp_derivative = self.mesh_independency_filter(
@@ -176,12 +184,23 @@ class Optimization:
             change = np.max(np.abs(density - old_density))
             print(f'change = {change}')
 
-            if iteration % 1 == 0:
-                self.draw(density, f'density_{iteration}')
-                self.draw(comp_derivative, f'dc_{iteration}')
-                self.draw(elements_compliance, f'comp_{iteration}')
+            if iteration == 1 or iteration % 5 == 0:
+                self.draw(
+                    -density,
+                    os.path.join(Config.IMAGES_PATH.value, f'density/density_{iteration}'),
+                    norm=colors.Normalize(vmin=-1, vmax=0)
+                )
+                self.draw(
+                    comp_derivative,
+                    os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative_log/dc_{iteration}'),
+                    # norm=colors.LogNorm()
+                )
+                self.draw(
+                    elements_compliance,
+                    os.path.join(Config.IMAGES_PATH.value, f'compliance/comp_{iteration}')
+                )
                 plot_dispalcements(
                     displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
                     mesh=self.mesh,
-                    filename=f'displacements_{iteration}'
+                    filename=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ_{iteration}')
                 )

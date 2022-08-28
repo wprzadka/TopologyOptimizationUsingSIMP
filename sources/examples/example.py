@@ -12,7 +12,7 @@ from SimpleFEM.source.examples.materials import MaterialProperty
 from sources.optimization import Optimization
 
 if __name__ == '__main__':
-    mesh_path = os.path.join(os.path.dirname(__file__), 'meshes/rectangle180x60v2.msh')
+    mesh_path = os.path.join(os.path.dirname(__file__), 'meshes/rectangle180x60v4.msh')
     mesh = Mesh(mesh_path)
     mesh.draw()
 
@@ -31,6 +31,6 @@ if __name__ == '__main__':
         neumann_func=neumann_func,
         penalty=3,
         volume_fraction=0.5,
-        filter_radius=10.
+        filter_radius=8.
     )
-    optim.optimize(iteration_limit=30)
+    optim.optimize(iteration_limit=50)
