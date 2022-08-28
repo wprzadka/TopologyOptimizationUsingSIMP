@@ -8,7 +8,7 @@ FEM_PATH = os.path.abspath("SimpleFEM")
 sys.path.append(FEM_PATH)
 
 from SimpleFEM.source.mesh import Mesh
-from src.optimization import Optimization, MaterialProperty
+from source.optimization import Optimization, MaterialProperty
 
 if __name__ == '__main__':
     mesh_path = os.path.join(os.path.dirname(__file__), 'meshes/rectangle180x60v2.msh')
