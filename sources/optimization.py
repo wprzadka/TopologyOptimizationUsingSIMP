@@ -160,6 +160,7 @@ class Optimization:
             young_modulus=self.material.value[0],
             poisson_ratio=self.material.value[1]
         )
+        elem_stiff = [fem.construct_local_stiffness_matrix(el_idx) for el_idx in range(self.mesh.elems_num)]
 
         while change > 1e-4 and iteration < iteration_limit:
             iteration += 1
@@ -170,9 +171,8 @@ class Optimization:
             for elem_idx, nodes_ids in enumerate(self.mesh.nodes_of_elem):
                 base_func_ids = np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
                 elem_displacement = np.expand_dims(displacement[base_func_ids], 1)
-                elem_stiff = fem.construct_local_stiffness_matrix(elem_idx)
 
-                elements_compliance[elem_idx] = elem_displacement.T @ elem_stiff @ elem_displacement
+                elements_compliance[elem_idx] = elem_displacement.T @ elem_stiff[elem_idx] @ elem_displacement
 
             compliance = np.sum((density ** self.penalty) * elements_compliance)
             comp_derivative = -self.penalty * (density ** (self.penalty - 1)) * elements_compliance
