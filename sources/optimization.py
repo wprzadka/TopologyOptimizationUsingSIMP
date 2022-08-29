@@ -10,29 +10,12 @@ from matplotlib import tri
 from SimpleFEM.source.mesh import Mesh
 from SimpleFEM.source.fem.elasticity_setup import ElasticitySetup as FEM
 from SimpleFEM.source.utilities.computation_utils import center_of_mass, area_of_triangle
+from SimpleFEM.source.utilities.plotting_utils import plot_displacements
 from SimpleFEM.source.examples.materials import MaterialProperty
 
 
 class Config(Enum):
     IMAGES_PATH = 'images'
-
-
-def plot_dispalcements(mesh: Mesh, displacements: np.ndarray, filename: str = 'displacements.png'):
-    before = tri.Triangulation(
-        x=mesh.coordinates2D[:, 0],
-        y=mesh.coordinates2D[:, 1],
-        triangles=mesh.nodes_of_elem
-    )
-    plt.triplot(before, color='#1f77b4')
-    after = tri.Triangulation(
-        x=mesh.coordinates2D[:, 0] + displacements[:, 0],
-        y=mesh.coordinates2D[:, 1] + displacements[:, 1],
-        triangles=mesh.nodes_of_elem
-    )
-    plt.triplot(after, color='#ff7f0e')
-    plt.grid()
-    plt.savefig(filename)
-    plt.close()
 
 
 class Optimization:
