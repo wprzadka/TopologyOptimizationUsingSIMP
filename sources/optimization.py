@@ -60,7 +60,8 @@ class Optimization:
         while upper - lower > 1e-4:
             mid = lower + (upper - lower) / 2
 
-            beta = (-comp_deriv / mid) ** numerical_dumping
+            # B_e = -(compliance derivative / (lambda * volume derivative))
+            beta = (-comp_deriv / (mid * self.elem_volumes)) ** numerical_dumping
             x_new = np.clip(beta * x, lower_limit, upper_limit)
 
             # volume [np.sum(self.elem_volumes * x_new)] is monotonously decreasing function of lagrange multiplayer [mid]
