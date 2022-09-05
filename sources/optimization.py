@@ -92,17 +92,15 @@ class Optimization:
         return new_comp_deriv
 
     def get_elements_surrounding(self):
+        centers = np.array([center_of_mass(self.mesh.coordinates2D[el_nodes]) for el_nodes in self.mesh.nodes_of_elem])
+        diffs = centers[:, None, :] - centers
+        distances = np.linalg.norm(diffs, 2, axis=2)
+        is_close = distances < self.filter_radius
+
         surroundings = [[] for _ in range(self.mesh.elems_num)]
-        for el_idx, el_nodes in enumerate(self.mesh.nodes_of_elem):
-            el_center = center_of_mass(self.mesh.coordinates2D[el_nodes])
-
-            for oth_idx, oth_nodes in enumerate(self.mesh.nodes_of_elem):
-                oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
-
-                dist = np.linalg.norm(el_center - oth_center)
-                if dist > self.filter_radius:
-                    continue
-                surroundings[el_idx].append(oth_idx)
+        elem_ids, other_ids = is_close.nonzero()
+        for i, el_idx in enumerate(elem_ids):
+            surroundings[el_idx].append(other_ids[i])
         return surroundings
 
     def get_elems_volumes(self):
