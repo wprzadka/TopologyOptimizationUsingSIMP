@@ -45,7 +45,7 @@ class Optimization:
         self.elem_volumes = self.get_elems_volumes()
         self.volume = np.sum(self.elem_volumes)
 
-        self.elem_surrounding = self.get_elements_surrounding()
+        self.elem_filter_weights = self.get_elements_surrounding()
 
     def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
         step = 0.2
@@ -72,36 +72,17 @@ class Optimization:
         return x_new
 
     def mesh_independency_filter(self, comp_deriv: np.ndarray, density: np.ndarray):
-        new_comp_deriv = np.zeros_like(comp_deriv)
-        for el_idx, el_nodes in enumerate(self.mesh.nodes_of_elem):
-            el_center = center_of_mass(self.mesh.coordinates2D[el_nodes])
-
-            weights_sum = 0
-            combined_sum = 0
-
-            for oth_idx in self.elem_surrounding[el_idx]:
-                oth_nodes = self.mesh.nodes_of_elem[oth_idx]
-                oth_center = center_of_mass(self.mesh.coordinates2D[oth_nodes])
-                dist = np.linalg.norm(el_center - oth_center)
-
-                weight = self.filter_radius - dist
-                weights_sum += weight
-                combined_sum += weight * density[oth_idx] * comp_deriv[oth_idx]
-
-            new_comp_deriv[el_idx] = combined_sum / (density[el_idx] * weights_sum)
+        neighbours_influence = np.sum((density * comp_deriv) * self.elem_filter_weights, axis=1)
+        inertia = density * np.sum(self.elem_filter_weights, axis=1)
+        new_comp_deriv = neighbours_influence / inertia
         return new_comp_deriv
 
     def get_elements_surrounding(self):
         centers = np.array([center_of_mass(self.mesh.coordinates2D[el_nodes]) for el_nodes in self.mesh.nodes_of_elem])
         diffs = centers[:, None, :] - centers
         distances = np.linalg.norm(diffs, 2, axis=2)
-        is_close = distances < self.filter_radius
-
-        surroundings = [[] for _ in range(self.mesh.elems_num)]
-        elem_ids, other_ids = is_close.nonzero()
-        for i, el_idx in enumerate(elem_ids):
-            surroundings[el_idx].append(other_ids[i])
-        return surroundings
+        elem_filter_weights = (self.filter_radius - distances).clip(min=0)
+        return elem_filter_weights
 
     def get_elems_volumes(self):
         volumes = np.array([
