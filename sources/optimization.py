@@ -77,8 +77,8 @@ class Optimization:
 
     def get_elements_surrounding(self):
         centers = np.array([center_of_mass(self.mesh.coordinates2D[el_nodes]) for el_nodes in self.mesh.nodes_of_elem])
-        diffs = centers[:, None, :] - centers
-        distances = np.linalg.norm(diffs, 2, axis=2)
+        diffs = centers[:, None] - centers
+        distances = np.linalg.norm(diffs, axis=2)
         elem_filter_weights = (self.filter_radius - distances).clip(min=0)
         return elem_filter_weights
 
