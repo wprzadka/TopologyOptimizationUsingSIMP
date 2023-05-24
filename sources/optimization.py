@@ -3,19 +3,12 @@ from enum import Enum
 from typing import Callable
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import colors
-from matplotlib import tri
 
 from SimpleFEM.source.mesh import Mesh
 from SimpleFEM.source.fem.elasticity_setup import ElasticitySetup as FEM
 from SimpleFEM.source.utilities.computation_utils import center_of_mass, area_of_triangle
-from SimpleFEM.source.utilities.plotting_utils import plot_displacements
 from SimpleFEM.source.examples.materials import MaterialProperty
-
-
-class Config(Enum):
-    IMAGES_PATH = 'images'
+from sources.plots_utils import PlotsUtils
 
 
 class Optimization:
@@ -46,6 +39,11 @@ class Optimization:
         self.volume = np.sum(self.elem_volumes)
 
         self.elem_filter_weights = self.get_elements_surrounding()
+        self.plots_utils = PlotsUtils(
+            mesh=self.mesh,
+            penalty=self.penalty,
+            elem_volumes=self.elem_volumes
+        )
 
     def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
         step = 0.2
@@ -153,22 +151,13 @@ class Optimization:
             change = np.max(np.abs(density - old_density))
             print(f'change = {change}')
 
-            if iteration == 1 or iteration % 5 == 0:
-                self.draw(
-                    -density,
-                    os.path.join(Config.IMAGES_PATH.value, f'density/density{iteration}'),
-                    norm=colors.Normalize(vmin=-1, vmax=0)
+            if iteration < 25 or iteration % 5 == 0 or iteration in [32, 64]:
+                self.plots_utils.make_plots(
+                    displacement=displacement,
+                    density=density,
+                    comp_derivative=comp_derivative,
+                    elements_compliance=elements_compliance,
+                    iteration=iteration
                 )
-                self.draw(
-                    comp_derivative,
-                    os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative/dc{iteration}'),
-                )
-                self.draw(
-                    elements_compliance,
-                    os.path.join(Config.IMAGES_PATH.value, f'compliance/comp{iteration}')
-                )
-                plot_dispalcements(
-                    displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
-                    mesh=self.mesh,
-                    filename=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ{iteration}')
-                )
+        self.plots_utils.draw_final_design(density)
+
