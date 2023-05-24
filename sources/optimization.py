@@ -38,6 +38,10 @@ class Optimization:
         self.elem_volumes = self.get_elems_volumes()
         self.volume = np.sum(self.elem_volumes)
 
+        self.base_func_ids = [
+            np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
+            for nodes_ids in self.mesh.nodes_of_elem
+        ]
         self.elem_filter_weights = self.get_elements_surrounding()
         self.plots_utils = PlotsUtils(
             mesh=self.mesh,
@@ -89,22 +93,19 @@ class Optimization:
         ])
         return volumes
 
-    def draw(self, density: np.ndarray, file_name: str, ratio: float = None, norm=None):
-        triangulation = tri.Triangulation(
-            x=self.mesh.coordinates2D[:, 0],
-            y=self.mesh.coordinates2D[:, 1],
-            triangles=self.mesh.nodes_of_elem
-        )
+    def compute_elems_compliance(self, density: np.ndarray, displacement: np.ndarray, elem_stiff: list):
+        # elements_compliance = np.empty_like(density)
+        # for elem_idx in range(elements_compliance.size):
+        #     elem_displacement = np.expand_dims(displacement[self.base_func_ids[elem_idx]], 1)
+        #     elements_compliance[elem_idx] = elem_displacement.T @ elem_stiff[elem_idx] @ elem_displacement
+        # 1335 ms
 
-        fig, ax = plt.subplots()
-        ax.tripcolor(triangulation, density, cmap='gray', norm=norm)
-        if ratio is not None:
-            x_left, x_right = ax.get_xlim()
-            y_low, y_high = ax.get_ylim()
-            ax.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * ratio)
-        # ax.colorbar()
-        plt.savefig(file_name, bbox_inches='tight')
-        plt.close(fig)
+        elements_compliance = np.squeeze(np.array([
+            displacement[None, base_funcs] @ elem_stiff_mat @ displacement[base_funcs, None]
+            for base_funcs, elem_stiff_mat in zip(self.base_func_ids, elem_stiff)
+        ]))
+        # 861 ms
+        return elements_compliance
 
     def optimize(self, iteration_limit: int = 100):
 
@@ -128,12 +129,11 @@ class Optimization:
 
             displacement = fem.solve(modifier=density ** self.penalty)
 
-            elements_compliance = np.zeros_like(density)
-            for elem_idx, nodes_ids in enumerate(self.mesh.nodes_of_elem):
-                base_func_ids = np.hstack((nodes_ids, nodes_ids + self.mesh.nodes_num))
-                elem_displacement = np.expand_dims(displacement[base_func_ids], 1)
-
-                elements_compliance[elem_idx] = elem_displacement.T @ elem_stiff[elem_idx] @ elem_displacement
+            elements_compliance = self.compute_elems_compliance(
+                density=density,
+                displacement=displacement,
+                elem_stiff=elem_stiff
+            )
 
             compliance = np.sum((density ** self.penalty) * elements_compliance)
             comp_derivative = -self.penalty * (density ** (self.penalty - 1)) * elements_compliance
