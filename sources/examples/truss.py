@@ -12,14 +12,13 @@ from SimpleFEM.source.examples.materials import MaterialProperty
 from sources.optimization import Optimization
 
 if __name__ == '__main__':
-    mesh_path = os.path.join(os.path.dirname(__file__), 'meshes/rectangle180x60v4.msh')
+    mesh_path = os.path.join(os.path.dirname(__file__), 'meshes/truss_domain.msh')
     mesh = Mesh(mesh_path)
     mesh.draw()
+    mesh.set_boundary_condition(Mesh.BoundaryConditionType.DIRICHLET, ['left-down', 'right-down'])
+    mesh.set_boundary_condition(Mesh.BoundaryConditionType.NEUMANN, ['mid-up'])
 
-    mesh.set_boundary_condition(Mesh.BoundaryConditionType.DIRICHLET, ['left'])
-    mesh.set_boundary_condition(Mesh.BoundaryConditionType.NEUMANN, ['right-down'])
-
-    rhs_func = lambda x: np.array([0, 0])
+    rhs_func = lambda x: np.array([0, -9.81])
     dirichlet_func = lambda x: np.array([0, 0])
     neumann_func = lambda x: np.array([0, -1e6])
 
