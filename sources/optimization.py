@@ -47,7 +47,7 @@ class Optimization:
             elem_volumes=self.elem_volumes
         )
 
-    def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, numerical_dumping: float = 0.5):
+    def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, num_dumping: float = 0.5):
         step = 0.2
         lower = 0
         upper = 1e5
@@ -61,7 +61,7 @@ class Optimization:
             mid = lower + (upper - lower) / 2
 
             # B_e = -(compliance derivative / (lambda * volume derivative))
-            beta = (-comp_deriv / (mid * self.elem_volumes)) ** numerical_dumping
+            beta = (-comp_deriv / (mid * self.elem_volumes)) ** num_dumping
             x_new = np.clip(beta * x, lower_limit, upper_limit)
 
             # volume [np.sum(self.elem_volumes * x_new)] is monotonously decreasing function of lagrange multiplayer [mid]
