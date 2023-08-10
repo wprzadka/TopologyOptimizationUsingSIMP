@@ -49,10 +49,10 @@ class Optimization:
 
     def bisection(self, x: np.ndarray, comp_deriv: np.ndarray, num_dumping: float = 0.5):
         step = 0.2
-        lower = 0
-        upper = 1e5
+        lower = 1e-9
+        upper = 1e9
 
-        lower_limit = np.maximum(0.001, x - step)
+        lower_limit = np.maximum(1e-4, x - step)
         upper_limit = np.minimum(1., x + step)
 
         x_new = None
