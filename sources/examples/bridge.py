@@ -19,21 +19,21 @@ if __name__ == '__main__':
     mesh.draw()
 
     mesh.set_boundary_condition(Mesh.BoundaryConditionType.DIRICHLET, ['left-down', 'right-down'])
-    mesh.set_boundary_condition(Mesh.BoundaryConditionType.NEUMANN, ['up'])
+    mesh.set_boundary_condition(Mesh.BoundaryConditionType.NEUMANN, ['down'])
 
-    rhs_func = lambda x: np.array([0, -9.81])
+    rhs_func = lambda x: np.array([0, 0])
     dirichlet_func = lambda x: np.array([0, 0])
-    neumann_func = lambda x: np.array([0, -1e6])
+    neumann_func = lambda x: np.array([0, -1])
 
     optim = Optimization(
         mesh=mesh,
-        material=MaterialProperty.Polystyrene,
+        material=MaterialProperty.TestMaterial,
         rhs_func=rhs_func,
         dirichlet_func=dirichlet_func,
         neumann_func=neumann_func,
         penalty=3,
         volume_fraction=0.3,
-        filter_radius=2.5
+        filter_radius=3.5
     )
 
     optim.optimize(iteration_limit=100)
