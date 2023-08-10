@@ -7,11 +7,11 @@ from matplotlib import tri, colors
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 from SimpleFEM.source.mesh import Mesh
-from SimpleFEM.source.utilities.plotting_utils import plot_displacements
 
 
 class Config(Enum):
     IMAGES_PATH = 'images'
+    COMP_DER_LIMITS = (-20, 0)
 
 
 class PlotsUtils:
@@ -20,6 +20,9 @@ class PlotsUtils:
         self.mesh = mesh
         self.penalty = penalty
         self.elem_volumes = elem_volumes
+        height = mesh.coordinates2D[:,1].max() - mesh.coordinates2D[:,1].min()
+        width = mesh.coordinates2D[:,0].max() - mesh.coordinates2D[:,0].min()
+        self.ratio = height / width
 
     def make_plots(
             self,
@@ -32,60 +35,54 @@ class PlotsUtils:
         self.draw(
             density,
             os.path.join(Config.IMAGES_PATH.value, f'density/density{iteration}'),
-            ratio=1 / 3,
             norm=colors.Normalize(vmin=0, vmax=1),
             cmap='gray_r'
         )
+        min_cd, max_cd = Config.COMP_DER_LIMITS.value
         self.draw(
             comp_derivative,
             os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative/dc{iteration}'),
-            ratio=1 / 3,
-            norm=colors.Normalize(vmin=-500, vmax=0),
+            norm=colors.Normalize(vmin=min_cd, vmax=max_cd),
             cmap='Blues_r'
         )
         self.draw(
             comp_derivative,
             os.path.join(Config.IMAGES_PATH.value, f'cd_free/dc{iteration}'),
-            ratio=1 / 3,
-            # norm=colors.Normalize(vmin=-1000, vmax=0),
             cmap='Blues_r'
         )
         self.draw(
             comp_derivative,
             os.path.join(Config.IMAGES_PATH.value, f'compliance_derivative_log/dc{iteration}'),
-            ratio=1 / 3,
-            norm=colors.SymLogNorm(linthresh=1, vmin=-1e3, vmax=0),
+            norm=colors.SymLogNorm(linthresh=1, vmin=min_cd, vmax=max_cd),
             cmap='Blues_r'
         )
         self.draw(
             (density ** self.penalty) * elements_compliance,
             os.path.join(Config.IMAGES_PATH.value, f'compliance/comp{iteration}'),
-            ratio=1 / 3,
             cmap='coolwarm'
         )
         self.draw(
             comp_derivative,
             os.path.join(Config.IMAGES_PATH.value, f'power_norm1/dc{iteration}'),
-            ratio=1 / 3,
-            norm=colors.PowerNorm(gamma=2, vmin=-1e3, vmax=0),
+            norm=colors.PowerNorm(gamma=2, vmin=min_cd, vmax=max_cd),
             cmap='Blues_r',
-            colorbar_ticks=[0, -200, -400, -600, -800]
+            colorbar_ticks=np.linspace(max_cd, min_cd, 5)
         )
         self.draw(
             comp_derivative,
             os.path.join(Config.IMAGES_PATH.value, f'power_norm2/dc{iteration}'),
-            ratio=1 / 3,
-            norm=colors.PowerNorm(gamma=3, vmin=-1e3, vmax=0),
+            norm=colors.PowerNorm(gamma=3, vmin=min_cd, vmax=max_cd),
             cmap='Blues_r',
-            colorbar_ticks=[0, -200, -400, -600, -800]
+            colorbar_ticks=np.linspace(max_cd, min_cd, 5)
         )
-        plot_displacements(
+        self.plot_displacements(
             displacements=np.vstack((displacement[:self.mesh.nodes_num], displacement[self.mesh.nodes_num:])).T,
-            mesh=self.mesh,
-            file_name=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ{iteration}')
+            density=density,
+            scale_factor=1,
+            file_name=os.path.join(Config.IMAGES_PATH.value, f'displacements/displ{iteration}'),
         )
 
-    def draw(self, elem_values: np.ndarray, file_name: str, ratio: float = None, norm=None, cmap='gray', colorbar_ticks=None):
+    def draw(self, elem_values: np.ndarray, file_name: str, norm=None, cmap='gray', colorbar_ticks=None):
         triangulation = tri.Triangulation(
             x=self.mesh.coordinates2D[:, 0],
             y=self.mesh.coordinates2D[:, 1],
@@ -96,10 +93,10 @@ class PlotsUtils:
         img = ax.tripcolor(triangulation, elem_values, cmap=cmap, norm=norm)
 
         cbar_ax = ax
-        if ratio is not None:
+        if self.ratio is not None:
             x_left, x_right = ax.get_xlim()
             y_low, y_high = ax.get_ylim()
-            ax.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * ratio)
+            ax.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * self.ratio)
 
             ax_div = make_axes_locatable(ax)
             cbar_ax = ax_div.append_axes('right', size='3%', pad='1%')
@@ -107,7 +104,7 @@ class PlotsUtils:
         fig.colorbar(img, cax=cbar_ax, ticks=colorbar_ticks)
 
         ax.set_xlabel('x')
-        ax.set_ylabel('y')
+        ax.set_ylabel('y', rotation=0)
         ax.set_xticks([])
         ax.set_yticks([])
 
@@ -118,10 +115,35 @@ class PlotsUtils:
         self.draw_final_design_inner(
             density,
             file_name = os.path.join(Config.IMAGES_PATH.value, f'final_design'),
-            ratio = 1 / 3,
             norm = colors.Normalize(vmin=0, vmax=1),
             cmap = 'gray_r'
         )
 
-    def draw_final_design_inner(self, density: np.ndarray, file_name: str, ratio: float = None, norm=None, cmap='gray'):
-        self.draw(density > 0.5, file_name, ratio, norm, cmap)
+    def draw_final_design_inner(self, density: np.ndarray, file_name: str, norm=None, cmap='gray'):
+        self.draw(density > 0.5, file_name, norm, cmap)
+
+    def plot_displacements(self, displacements: np.ndarray, density: np.ndarray, scale_factor: float, file_name: str):
+        before = tri.Triangulation(
+            x=self.mesh.coordinates2D[:, 0],
+            y=self.mesh.coordinates2D[:, 1],
+            triangles=self.mesh.nodes_of_elem
+        )
+        before.set_mask(density < 0.08)
+        plt.triplot(before, color='#1f77b4')
+        after = tri.Triangulation(
+            x=self.mesh.coordinates2D[:, 0] + displacements[:, 0] * scale_factor,
+            y=self.mesh.coordinates2D[:, 1] + displacements[:, 1] * scale_factor,
+            triangles=self.mesh.nodes_of_elem
+        )
+        after.set_mask(density < 0.08)
+        plt.triplot(after, color='#ff7f0e')
+
+        ax = plt.gca()
+        if self.ratio is not None:
+            x_left, x_right = ax.get_xlim()
+            y_low, y_high = ax.get_ylim()
+            ax.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * self.ratio)
+
+        plt.grid()
+        plt.savefig(file_name, bbox_inches='tight')
+        plt.close()
