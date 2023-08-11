@@ -11,6 +11,10 @@ from SimpleFEM.source.mesh import Mesh
 
 class Config(Enum):
     IMAGES_PATH = 'images'
+    IMAGES_SUBDIRS = [
+        'density', 'compliance_derivative', 'cd_free', 'compliance_derivative_log',
+        'compliance', 'power_norm1', 'power_norm2', 'displacements'
+    ]
     COMP_DER_LIMITS = (-20, 0)
 
 
@@ -24,6 +28,12 @@ class PlotsUtils:
         width = mesh.coordinates2D[:,0].max() - mesh.coordinates2D[:,0].min()
         self.ratio = height / width
 
+        if not os.path.exists(Config.IMAGES_PATH.value):
+            os.makedirs(Config.IMAGES_PATH.value)
+        for v in Config.IMAGES_SUBDIRS.value:
+            path = os.path.join(Config.IMAGES_PATH.value, v)
+            if not os.path.exists(path):
+                os.makedirs(path)
     def make_plots(
             self,
             displacement: np.ndarray,
